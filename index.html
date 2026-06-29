@@ -146,6 +146,7 @@ var st = {
   detailCatId: null
 };
 var _firstLoad = true;  // drop animation only on first load
+var GAS_URL = 'https://script.google.com/macros/s/AKfycbwrESdZCt-6RgyGihBy17JKKhcnunW8LH6oo2vUS4orO66cjLu_6NGeOh2EX8FelAaj/exec';
 
 function mk() { return st.year + '-' + String(st.month).padStart(2,'0'); }
 function getEntries() {
@@ -563,6 +564,11 @@ function deleteEntry(id) {
   d[k] = d[k].filter(function(e){ return e.id !== id; });
   var cat = CATS.filter(function(c){ return c.id === st.detailCatId; })[0];
   if (cat) renderDetail(cat);
+  // スプレッドシートから削除
+  fetch(GAS_URL, {
+    method: 'POST',
+    body: JSON.stringify({ action: 'delete', id: id })
+  }).catch(function(e){ console.error('削除失敗:', e); });
 }
 
 // ---- Add modal ----
@@ -599,17 +605,69 @@ function addEntry() {
   if (!st.data[st.activeCard][k]) st.data[st.activeCard][k] = [];
   var existingCats = (st.data[st.activeCard][k] || []).map(function(e){ return e.cat; });
   var isNewCat = existingCats.indexOf(st.selCat) < 0;
-  st.data[st.activeCard][k].push({ id: st.nextId++, name: name, amount: amount, date: date, cat: st.selCat });
+  var newEntry = { id: st.nextId++, name: name, amount: amount, date: date, cat: st.selCat };
+  st.data[st.activeCard][k].push(newEntry);
   closeModal('addModal');
   renderTabs();
   renderHeader();
   renderBubbles(isNewCat ? st.selCat : null);
+  // スプレッドシートに保存
+  fetch(GAS_URL, {
+    method: 'POST',
+    body: JSON.stringify({
+      action: 'add',
+      id: newEntry.id,
+      card: st.activeCard,
+      date: newEntry.date,
+      name: newEntry.name,
+      amount: newEntry.amount,
+      cat: newEntry.cat
+    })
+  }).catch(function(e){ console.error('保存失敗:', e); });
 }
 
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 function closeIfBg(e, id) { if (e.target === e.currentTarget) closeModal(id); }
 
-render();
+function loadData() {
+  fetch(GAS_URL)
+    .then(function(res){ return res.json(); })
+    .then(function(json) {
+      if (json.status !== 'ok') { render(); return; }
+      // rebuild st.data from sheet rows
+      st.data = {};
+      st.nextId = 1;
+      json.data.forEach(function(row) {
+        var card = row.card;
+        var date = row.date;
+        var ym = date.substring(0, 7); // 'YYYY-MM'
+        if (!st.data[card]) { st.data[card] = {}; st.cards.push(card); }
+        if (!st.data[card][ym]) st.data[card][ym] = [];
+        var id = parseInt(row.id) || st.nextId;
+        st.data[card][ym].push({
+          id: id,
+          name: row.name,
+          amount: parseInt(row.amount),
+          date: row.date,
+          cat: row.cat
+        });
+        if (id >= st.nextId) st.nextId = id + 1;
+      });
+      // deduplicate cards
+      st.cards = st.cards.filter(function(c, i, a){ return a.indexOf(c) === i; });
+      if (st.cards.indexOf(st.activeCard) < 0 && st.cards.length > 0) {
+        st.activeCard = st.cards[0];
+      }
+      render();
+    })
+    .catch(function(e) {
+      console.error('データ読み込み失敗:', e);
+      render();
+    });
+}
+
+// スプレッドシートからデータを読み込んでから描画
+loadData();
 </script>
 </body>
 </html>
