@@ -274,6 +274,7 @@ function renderBubbles(newCatId) {
 
     // ボールを重ならず積み上げる共通配置関数（アニメーションなし）
     function packBubbles(targets) {
+      if (!targets || targets.length === 0) return;
       // 大きい順に並べる
       var sorted = targets.slice().sort(function(a, b){ return b.r - a.r; });
       // 1個目は床中央に置く
