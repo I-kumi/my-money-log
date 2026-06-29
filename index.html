@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MY MONEY LOG</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; background: #f5f5f7; }
+.app-wrap { max-width: 390px; margin: 0 auto; background: #fff; min-height: 100vh; position: relative; overflow: hidden; }
+.page { display: none; flex-direction: column; min-height: 100vh; }
+.page.active { display: flex; }
+
+.header { padding: 16px 20px 12px; background: #fff; border-bottom: 1px solid #e5e5e5; }
+.card-tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.card-tab { padding: 5px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; border: 1px solid #ddd; background: #f5f5f7; color: #555; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
+.card-tab.active { background: rgba(0,153,153,0.6); color: #fff; border-color: rgba(0,153,153,0.6); }
+.card-tab-add { padding: 5px 10px; border-radius: 20px; font-size: 13px; border: 1px dashed #ccc; background: transparent; color: #aaa; cursor: pointer; white-space: nowrap; }
+
+.month-nav { display: flex; align-items: center; justify-content: center; gap: 20px; padding: 14px 20px 6px; }
+.month-btn { background: none; border: none; color: #666; cursor: pointer; font-size: 20px; padding: 4px 8px; border-radius: 8px; }
+.month-btn:hover { background: #f0f0f0; }
+.month-label { font-size: 18px; font-weight: 600; color: #111; }
+
+.total-area { text-align: center; padding: 4px 20px 14px; }
+.total-label { font-size: 12px; color: #999; margin-bottom: 2px; }
+.total-amount { font-size: 34px; font-weight: 700; color: #111; letter-spacing: -0.5px; }
+.total-amount span { font-size: 16px; font-weight: 400; color: #888; margin-left: 2px; }
+
+.bubble-area { flex: 1; position: relative; overflow: hidden; min-height: 320px; }
+.bubble-grid { position: relative; width: 100%; height: 100%; }
+.bubble { border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; position: absolute; }
+.bubble:active { opacity: 0.85; }
+.empty-state { text-align: center; color: #bbb; font-size: 14px; padding: 60px 20px; width: 100%; }
+
+.fab { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: rgba(0,153,153,0.6); color: #fff; border: none; border-radius: 24px; padding: 10px 22px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; z-index: 10; box-shadow: none; }
+.fab i { font-size: 15px; }
+
+.detail-topbar { padding: 16px 20px 14px; background: #fff; border-bottom: 1px solid #e5e5e5; display: flex; align-items: center; gap: 12px; }
+.back-btn { background: none; border: none; color: #555; cursor: pointer; font-size: 22px; padding: 2px 10px 2px 0; display: flex; align-items: center; }
+.detail-summary { padding: 16px 20px; border-bottom: 1px solid #e5e5e5; background: #fafafa; }
+.detail-total-num { font-size: 30px; font-weight: 700; color: #111; }
+.detail-total-num span { font-size: 15px; font-weight: 400; color: #888; margin-left: 2px; }
+.detail-count { font-size: 12px; color: #aaa; margin-top: 3px; }
+.item-list { flex: 1; padding: 0 20px 80px; overflow-y: auto; }
+.item { display: flex; justify-content: space-between; align-items: center; padding: 14px 0; border-bottom: 1px solid #f0f0f0; }
+.item-left { flex: 1; }
+.item-name { font-size: 14px; font-weight: 600; color: #111; }
+.item-date { font-size: 12px; color: #aaa; margin-top: 2px; }
+.item-right { display: flex; align-items: center; gap: 10px; }
+.item-amount { font-size: 15px; font-weight: 600; color: #111; }
+.item-del { background: none; border: none; color: #ccc; cursor: pointer; padding: 4px; display: flex; align-items: center; }
+.item-del:hover { color: #DC2626; }
+
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
+.modal { background: #fff; border-radius: 20px 20px 0 0; padding: 24px 20px 32px; width: 100%; max-width: 390px; }
+.modal-close { background: none; border: none; font-size: 22px; color: #aaa; cursor: pointer; }
+.field { margin-bottom: 14px; }
+.field label { font-size: 12px; color: #666; display: block; margin-bottom: 6px; font-weight: 600; }
+.field input { width: 100%; padding: 11px 14px; border-radius: 10px; border: 1px solid #ddd; background: #fafafa; color: #111; font-size: 16px; font-family: inherit; }
+.field input:focus { outline: none; border-color: rgba(0,153,153,0.6); background: #fff; }
+.cat-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.cat-btn { padding: 9px 4px; border-radius: 10px; border: 1px solid #ddd; background: #fafafa; color: #555; font-size: 12px; font-weight: 600; cursor: pointer; text-align: center; transition: all 0.12s; font-family: inherit; }
+.cat-btn.selected { background: #EBF2FF; color: rgba(0,153,153,0.6); border-color: rgba(0,153,153,0.6); }
+.submit-btn { width: 100%; padding: 15px; background: rgba(0,153,153,0.6); color: #fff; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 10px; font-family: inherit; }
+.submit-btn:active { opacity: 0.9; }
+.page-fade { animation: pageFadeIn 0.3s ease; }
+@keyframes pageFadeIn { from { opacity: 0; } to { opacity: 1; } }
+</style>
+</head>
+<body>
+<div class="app-wrap">
+
+  <div class="page active" id="mainPage">
+    <div class="header">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <span style="font-size:15px;font-weight:700;color:#111;">MY MONEY LOG</span>
+      </div>
+      <div class="card-tabs" id="cardTabs"></div>
+    </div>
+    <div class="month-nav">
+      <button class="month-btn" onclick="changeMonth(-1)"><i class="ti ti-chevron-left"></i></button>
+      <span class="month-label" id="monthLabel"></span>
+      <button class="month-btn" onclick="changeMonth(1)"><i class="ti ti-chevron-right"></i></button>
+    </div>
+    <div class="total-area">
+      <div class="total-label" id="totalLabel"></div>
+      <div class="total-amount" id="totalAmount">0<span>円</span></div>
+    </div>
+    <div class="bubble-area">
+      <div class="bubble-grid" id="bubbleGrid"></div>
+    </div>
+    <button class="fab" onclick="openAddModal()">
+      <i class="ti ti-plus"></i>支出を追加
+    </button>
+  </div>
+
+  <div class="page" id="detailPage">
+    <div class="detail-topbar">
+      <button class="back-btn" onclick="goBack()"><i class="ti ti-arrow-left"></i></button>
+      <div id="detailDot" style="width:13px;height:13px;border-radius:50%;flex-shrink:0;"></div>
+      <span style="font-size:17px;font-weight:700;color:#111;" id="detailTitle"></span>
+    </div>
+    <div class="detail-summary">
+      <div class="detail-total-num" id="detailTotal"></div>
+      <div class="detail-count" id="detailCount"></div>
+    </div>
+    <div class="item-list" id="itemList"></div>
+  </div>
+
+</div>
+
+<div class="modal-bg" id="addModal" style="display:none;" onclick="closeIfBg(event,'addModal')">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+      <span style="font-size:17px;font-weight:700;color:#111;">支出を追加</span>
+      <button class="modal-close" onclick="closeModal('addModal')"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="field"><label>店名・メモ</label><input type="text" id="inputName" placeholder="例：セブンイレブン" /></div>
+    <div class="field"><label>金額（円）</label><input type="number" id="inputAmount" placeholder="例：1500" inputmode="numeric" /></div>
+    <div class="field"><label>日付</label><input type="date" id="inputDate" /></div>
+    <div class="field"><label>カテゴリ</label><div class="cat-grid" id="catGrid"></div></div>
+    <button class="submit-btn" onclick="addEntry()">追加する</button>
+  </div>
+</div>
+
+<script>
+var CATS = [
+  { id:'food',    name:'食費',   g1:'#FFB74D', g2:'#FF9800', icon:'ti-salad' },
+  { id:'transit', name:'交通費', g1:'#5BC4E8', g2:'#2BA0D4', icon:'ti-train' },
+  { id:'daily',   name:'日用品', g1:'#33BBBB', g2:'#009999', icon:'ti-shopping-cart' },
+  { id:'fun',     name:'娯楽',   g1:'#F78EC4', g2:'#F368AD', icon:'ti-device-gamepad-2' },
+  { id:'medical', name:'医療',   g1:'#C96EE0', g2:'#AF40CC', icon:'ti-stethoscope' },
+  { id:'other',   name:'その他', g1:'#ABABAB', g2:'#8A8A8A', icon:'ti-dots' },
+];
+
+var SAMPLE = {};
+
+var st = {
+  cards: ['Oliveカード'],
+  activeCard: 'Oliveカード',
+  data: JSON.parse(JSON.stringify(SAMPLE)),
+  year: 2026, month: 6,
+  selCat: 'food', nextId: 100,
+  detailCatId: null
+};
+var _firstLoad = true;  // drop animation only on first load
+
+function mk() { return st.year + '-' + String(st.month).padStart(2,'0'); }
+function getEntries() {
+  var d = st.data[st.activeCard];
+  if (!d) return [];
+  return d[mk()] || [];
+}
+
+function changeMonth(dir) {
+  st.month += dir;
+  if (st.month > 12) { st.month = 1; st.year++; }
+  if (st.month < 1)  { st.month = 12; st.year--; }
+  render();
+}
+
+function render() { renderTabs(); renderHeader(); renderBubbles(); }
+
+function renderTabs() {
+  var html = st.cards.map(function(c) {
+    return '<button class="card-tab' + (c===st.activeCard?' active':'') + '" onclick="selectCard(\'' + c + '\')">' + c + '</button>';
+  }).join('');
+  html += '<button class="card-tab-add" onclick="addCard()"><i class="ti ti-plus" style="font-size:12px"></i> 追加</button>';
+  document.getElementById('cardTabs').innerHTML = html;
+}
+
+function selectCard(n) { st.activeCard = n; render(); }
+
+function addCard() {
+  var n = prompt('カード名を入力してください');
+  if (!n || !n.trim()) return;
+  var name = n.trim();
+  if (st.cards.indexOf(name) >= 0) { alert('同じ名前のカードがあります'); return; }
+  st.cards.push(name); st.activeCard = name; render();
+}
+
+function renderHeader() {
+  document.getElementById('monthLabel').textContent = st.year + '年' + st.month + '月';
+  var total = getEntries().reduce(function(s,e){ return s + e.amount; }, 0);
+  document.getElementById('totalAmount').innerHTML = total.toLocaleString() + '<span>円</span>';
+  var lastDay = new Date(st.year, st.month, 0).getDate();
+  document.getElementById('totalLabel').textContent = st.month + '/1〜' + st.month + '/' + lastDay + ' の合計';
+}
+
+// ---- Physics ----
+var _animFrame = null;
+
+function stopPhysics() {
+  if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null; }
+}
+
+function makeBubbleEl(cat, r, amt) {
+  var d = r * 2;
+  var fs = r > 60 ? 13 : r > 50 ? 12 : 11;
+  var is = r > 60 ? 22 : r > 50 ? 19 : 16;
+  var div = document.createElement('div');
+  div.className = 'bubble';
+  div.style.cssText = [
+    'width:' + d + 'px',
+    'height:' + d + 'px',
+    'background-image:linear-gradient(180deg,' + cat.g1 + ' 0%,' + cat.g2 + ' 100%)',
+    'overflow:hidden',
+    'box-shadow:0 3px 8px rgba(0,0,0,0.22)'
+  ].join(';');
+  div.innerHTML =
+    '<div style="position:absolute;top:6%;left:12%;width:76%;height:44%;' +
+      'background:linear-gradient(180deg,rgba(255,255,255,0.55) 0%,rgba(255,255,255,0.04) 100%);' +
+      'border-radius:50%;pointer-events:none;"></div>' +
+    '<i class="ti ' + cat.icon + '" style="color:#fff;font-size:' + is + 'px;' +
+      'margin-bottom:3px;position:relative;text-shadow:1px 1px 2px rgba(0,0,0,0.25);"></i>' +
+    '<span style="color:#fff;font-size:' + fs + 'px;font-weight:400;text-align:center;' +
+      'line-height:1.2;padding:0 6px;position:relative;text-shadow:1px 1px 2px rgba(0,0,0,0.25);">' + cat.name + '</span>' +
+    '<span style="color:#fff;font-size:' + fs + 'px;font-weight:700;margin-top:2px;' +
+      'position:relative;text-shadow:1px 1px 2px rgba(0,0,0,0.25);">' + amt.toLocaleString() + '円</span>';
+  return div;
+}
+
+function renderBubbles(newCatId) {
+  stopPhysics();
+  var grid = document.getElementById('bubbleGrid');
+  var list = getEntries();
+
+  if (!list.length) {
+    grid.innerHTML = '<div class="empty-state">' +
+      '<i class="ti ti-chart-bubble" style="font-size:42px;display:block;margin-bottom:10px;"></i>' +
+      'まだ記録がありません<br>＋ボタンから追加してください</div>';
+    return;
+  }
+
+  var totals = {};
+  CATS.forEach(function(c){ totals[c.id] = 0; });
+  list.forEach(function(e){ totals[e.cat] = (totals[e.cat] || 0) + e.amount; });
+  var active = CATS.filter(function(c){ return totals[c.id] > 0; });
+  var maxAmt = Math.max.apply(null, active.map(function(c){ return totals[c.id]; }));
+  var minAmt = Math.min.apply(null, active.map(function(c){ return totals[c.id]; }));
+  var minR = 46, maxR = 70;
+
+  grid.innerHTML = '';
+
+  // build DOM elements first so layout can happen
+  var bubbles = active.map(function(cat, i) {
+    var amt = totals[cat.id];
+    var ratio = maxAmt === minAmt ? 1 : (amt - minAmt) / (maxAmt - minAmt);
+    ratio = Math.sqrt(ratio);
+    var r = Math.round(minR + (maxR - minR) * ratio);
+    var el = makeBubbleEl(cat, r, amt);
+    el.onclick = (function(c, el){ return function(){ goDetail(c, el); }; })(cat, el);
+    // hide off-screen before layout so there's no flash at (0,0)
+    el.style.left = '-999px';
+    el.style.top  = '-999px';
+    grid.appendChild(el);
+    return { el: el, r: r, x: 0, y: 0, vx: 0, vy: 0, settled: false, catId: cat.id };
+  });
+
+  // after DOM is painted, read dimensions and start physics
+  setTimeout(function() {
+    var areaEl = document.querySelector('.bubble-area');
+    var W = areaEl.offsetWidth;
+    var H = areaEl.offsetHeight;
+    if (W < 100) W = 340;
+    if (H < 200) H = 360;
+
+    var GRAVITY  = 0.25;
+    var RESTITUTION = 0.45;
+    var FRICTION = 0.82;
+    var fabHeight = 80;
+    var floorY   = H - fabHeight;
+    var maxFrames = 500;
+    var frame = 0;
+
+    if (!_firstLoad && !newCatId) {
+      // no animation: place bubbles directly at rest position
+      // simple packed layout along the floor
+      // place bubbles at rest without animation
+      // first set all y to floor
+      bubbles.forEach(function(b, i) {
+        b.y = floorY - b.r;
+        b.x = (W / (bubbles.length + 1)) * (i + 1);
+        b.vx = 0; b.vy = 0;
+      });
+      // iterative overlap resolution (100 passes)
+      for (var pass = 0; pass < 100; pass++) {
+        var anyOverlap = false;
+        for (var pi = 0; pi < bubbles.length; pi++) {
+          for (var pj = pi + 1; pj < bubbles.length; pj++) {
+            var ba = bubbles[pi], bb = bubbles[pj];
+            var ddx = bb.x - ba.x, ddy = bb.y - ba.y;
+            var dd = Math.sqrt(ddx*ddx + ddy*ddy);
+            var md = ba.r + bb.r + 1;
+            if (dd > 0 && dd < md) {
+              anyOverlap = true;
+              var ov = (md - dd) / 2;
+              var nx = ddx/dd, ny = ddy/dd;
+              ba.x -= nx * ov; bb.x += nx * ov;
+              // keep on floor
+              ba.y = floorY - ba.r;
+              bb.y = floorY - bb.r;
+              // clamp walls
+              if (ba.x - ba.r < 0) ba.x = ba.r;
+              if (ba.x + ba.r > W) ba.x = W - ba.r;
+              if (bb.x - bb.r < 0) bb.x = bb.r;
+              if (bb.x + bb.r > W) bb.x = W - bb.r;
+            }
+          }
+        }
+        if (!anyOverlap) break;
+      }
+      bubbles.forEach(function(b) {
+        b.el.style.left = (b.x - b.r) + 'px';
+        b.el.style.top  = (b.y - b.r) + 'px';
+      });
+      return;
+    }
+
+    // drop animation
+    _firstLoad = false;
+
+    if (newCatId) {
+      // static placement first for all bubbles
+      bubbles.forEach(function(b, i) {
+        b.y = floorY - b.r;
+        b.x = (W / (bubbles.length + 1)) * (i + 1);
+        b.vx = 0; b.vy = 0;
+      });
+      // resolve overlaps
+      for (var pass = 0; pass < 100; pass++) {
+        var anyOv = false;
+        for (var pi2 = 0; pi2 < bubbles.length; pi2++) {
+          for (var pj2 = pi2 + 1; pj2 < bubbles.length; pj2++) {
+            var ba2 = bubbles[pi2], bb2 = bubbles[pj2];
+            var ddx2 = bb2.x - ba2.x, ddy2 = bb2.y - ba2.y;
+            var dd2 = Math.sqrt(ddx2*ddx2 + ddy2*ddy2);
+            var md2 = ba2.r + bb2.r + 1;
+            if (dd2 > 0 && dd2 < md2) {
+              anyOv = true;
+              var ov2 = (md2 - dd2) / 2;
+              var nx2 = ddx2/dd2;
+              ba2.x -= nx2 * ov2; bb2.x += nx2 * ov2;
+              ba2.y = floorY - ba2.r; bb2.y = floorY - bb2.r;
+              if (ba2.x - ba2.r < 0) ba2.x = ba2.r;
+              if (ba2.x + ba2.r > W) ba2.x = W - ba2.r;
+              if (bb2.x - bb2.r < 0) bb2.x = bb2.r;
+              if (bb2.x + bb2.r > W) bb2.x = W - bb2.r;
+            }
+          }
+        }
+        if (!anyOv) break;
+      }
+      // place existing bubbles at rest
+      bubbles.forEach(function(b) {
+        if (b.catId !== newCatId) {
+          b.settled = true;
+          b.el.style.left = (b.x - b.r) + 'px';
+          b.el.style.top  = (b.y - b.r) + 'px';
+        }
+      });
+      // drop only the new cat bubble from above
+      bubbles.forEach(function(b) {
+        if (b.catId === newCatId) {
+          b.y  = -b.r - 40;
+          b.vx = (Math.random() - 0.5) * 1.2;
+          b.vy = 0;
+          b.settled = false;
+          b.el.style.left = (b.x - b.r) + 'px';
+          b.el.style.top  = (b.y - b.r) + 'px';
+        }
+      });
+    } else {
+      // full drop: all bubbles fall
+      bubbles.forEach(function(b, i) {
+        b.x  = (W / (bubbles.length + 1)) * (i + 1);
+        b.y  = -b.r - i * 90;
+        b.vx = (Math.random() - 0.5) * 1.2;
+        b.vy = 0;
+        b.el.style.left = (b.x - b.r) + 'px';
+        b.el.style.top  = (b.y - b.r) + 'px';
+      });
+    }
+
+    function step() {
+      frame++;
+      var allSettled = true;
+
+      for (var i = 0; i < bubbles.length; i++) {
+        var b = bubbles[i];
+        if (b.settled) continue;
+        allSettled = false;
+
+        b.vy += GRAVITY;
+        b.x  += b.vx;
+        b.y  += b.vy;
+
+        // floor
+        if (b.y + b.r >= floorY) {
+          b.y  = floorY - b.r;
+          b.vy = -Math.abs(b.vy) * RESTITUTION;
+          b.vx *= FRICTION;
+          if (Math.abs(b.vy) < 0.6) b.vy = 0;
+        }
+
+        // walls
+        if (b.x - b.r < 0)  { b.x = b.r;     b.vx =  Math.abs(b.vx) * 0.5; }
+        if (b.x + b.r > W)  { b.x = W - b.r;  b.vx = -Math.abs(b.vx) * 0.5; }
+
+        // bubble collisions
+        for (var j = i + 1; j < bubbles.length; j++) {
+          var b2 = bubbles[j];
+          var dx   = b2.x - b.x;
+          var dy   = b2.y - b.y;
+          var dist = Math.sqrt(dx * dx + dy * dy);
+          var minD = b.r + b2.r;
+          if (dist > 0 && dist < minD) {
+            var overlap = (minD - dist) / 2;
+            var nx = dx / dist;
+            var ny = dy / dist;
+            // fully separate in one step to prevent overlap buildup
+            b.x  -= nx * overlap * 1.05;
+            b.y  -= ny * overlap * 1.05;
+            b2.x += nx * overlap * 1.05;
+            b2.y += ny * overlap * 1.05;
+            var dvx = b.vx - b2.vx;
+            var dvy = b.vy - b2.vy;
+            var dot = dvx * nx + dvy * ny;
+            if (dot > 0) {
+              var imp = dot * 0.55;
+              b.vx  -= imp * nx;  b.vy  -= imp * ny;
+              b2.vx += imp * nx;  b2.vy += imp * ny;
+            }
+            b2.settled = false;
+          }
+        }
+
+        // settle
+        var speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+        if (speed < 0.25 && b.y + b.r >= floorY - 2) {
+          b.vx = 0; b.vy = 0; b.settled = true;
+        }
+
+        b.el.style.left = (b.x - b.r) + 'px';
+        b.el.style.top  = (b.y - b.r) + 'px';
+      }
+
+      // extra overlap cleanup pass every frame even after settling
+      for (var ii = 0; ii < bubbles.length; ii++) {
+        for (var jj = ii + 1; jj < bubbles.length; jj++) {
+          var ba = bubbles[ii], bb2 = bubbles[jj];
+          var ddx = bb2.x - ba.x, ddy = bb2.y - ba.y;
+          var dd = Math.sqrt(ddx*ddx + ddy*ddy);
+          var md = ba.r + bb2.r;
+          if (dd > 0 && dd < md) {
+            var ov = (md - dd) / 2 + 0.5;
+            var nnx = ddx/dd, nny = ddy/dd;
+            ba.x -= nnx*ov; ba.y -= nny*ov;
+            bb2.x += nnx*ov; bb2.y += nny*ov;
+            ba.settled = false; bb2.settled = false;
+            ba.el.style.left = (ba.x - ba.r) + 'px';
+            ba.el.style.top  = (ba.y - ba.r) + 'px';
+            bb2.el.style.left = (bb2.x - bb2.r) + 'px';
+            bb2.el.style.top  = (bb2.y - bb2.r) + 'px';
+          }
+        }
+      }
+
+      if (!allSettled && frame < maxFrames) {
+        _animFrame = requestAnimationFrame(step);
+      } else {
+        _animFrame = null;
+      }
+    }
+
+    _animFrame = requestAnimationFrame(step);
+  }, 80);
+}
+
+// ---- Detail page ----
+function goDetail(cat, bubbleEl) {
+  st.detailCatId = cat.id;
+  if (bubbleEl) {
+    // bounce animation then fade to detail
+    var bounceUp = -18;
+    var orig = parseInt(bubbleEl.style.top) || 0;
+    var t0 = null;
+    var duration = 320;
+    function bounceAnim(ts) {
+      if (!t0) t0 = ts;
+      var prog = Math.min((ts - t0) / duration, 1);
+      // sine curve: goes up then comes back down
+      var offset = Math.sin(prog * Math.PI) * bounceUp;
+      bubbleEl.style.top = (orig + offset) + 'px';
+      if (prog < 1) {
+        requestAnimationFrame(bounceAnim);
+      } else {
+        bubbleEl.style.top = orig + 'px';
+        // fade out main page
+        var mainPage = document.getElementById('mainPage');
+        mainPage.style.transition = 'opacity 0.25s';
+        mainPage.style.opacity = '0';
+        setTimeout(function() {
+          renderDetail(cat);
+          mainPage.style.transition = '';
+          mainPage.style.opacity = '';
+          mainPage.classList.remove('active');
+          var detailPage = document.getElementById('detailPage');
+          detailPage.classList.add('active');
+          detailPage.classList.add('page-fade');
+          setTimeout(function(){ detailPage.classList.remove('page-fade'); }, 300);
+        }, 260);
+      }
+    }
+    requestAnimationFrame(bounceAnim);
+  } else {
+    renderDetail(cat);
+    document.getElementById('mainPage').classList.remove('active');
+    document.getElementById('detailPage').classList.add('active');
+  }
+}
+
+function renderDetail(cat) {
+  var list = getEntries().filter(function(e){ return e.cat === cat.id; });
+  var total = list.reduce(function(s,e){ return s + e.amount; }, 0);
+  document.getElementById('detailDot').style.background = cat.g2;
+  document.getElementById('detailTitle').textContent = cat.name;
+  document.getElementById('detailTotal').innerHTML = total.toLocaleString() + '<span>円</span>';
+  document.getElementById('detailCount').textContent = list.length + '件の利用';
+  var sorted = list.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+  document.getElementById('itemList').innerHTML = sorted.map(function(e){
+    return '<div class="item">' +
+      '<div class="item-left">' +
+        '<div class="item-name">' + e.name + '</div>' +
+        '<div class="item-date">' + fmtDate(e.date) + '</div>' +
+      '</div>' +
+      '<div class="item-right">' +
+        '<span class="item-amount">' + e.amount.toLocaleString() + '円</span>' +
+        '<button class="item-del" onclick="deleteEntry(' + e.id + ')" aria-label="削除">' +
+          '<i class="ti ti-trash" style="font-size:16px;"></i></button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function goBack() {
+  document.getElementById('detailPage').classList.remove('active');
+  document.getElementById('mainPage').classList.add('active');
+  render();
+}
+
+function fmtDate(d) {
+  var p = d.split('-');
+  return parseInt(p[1]) + '月' + parseInt(p[2]) + '日';
+}
+
+function deleteEntry(id) {
+  var k = mk();
+  var d = st.data[st.activeCard];
+  if (!d || !d[k]) return;
+  d[k] = d[k].filter(function(e){ return e.id !== id; });
+  var cat = CATS.filter(function(c){ return c.id === st.detailCatId; })[0];
+  if (cat) renderDetail(cat);
+}
+
+// ---- Add modal ----
+function openAddModal() {
+  document.getElementById('inputName').value = '';
+  document.getElementById('inputAmount').value = '';
+  var t = new Date();
+  document.getElementById('inputDate').value =
+    t.getFullYear() + '-' + String(t.getMonth()+1).padStart(2,'0') + '-' + String(t.getDate()).padStart(2,'0');
+  st.selCat = 'food';
+  renderCatGrid();
+  document.getElementById('addModal').style.display = 'flex';
+  setTimeout(function(){ document.getElementById('inputName').focus(); }, 100);
+}
+
+function renderCatGrid() {
+  document.getElementById('catGrid').innerHTML = CATS.map(function(c){
+    return '<button class="cat-btn' + (c.id===st.selCat?' selected':'') +
+      '" onclick="selCat(\'' + c.id + '\')">' + c.name + '</button>';
+  }).join('');
+}
+
+function selCat(id) { st.selCat = id; renderCatGrid(); }
+
+function addEntry() {
+  var name   = document.getElementById('inputName').value.trim();
+  var amount = parseInt(document.getElementById('inputAmount').value);
+  var date   = document.getElementById('inputDate').value;
+  if (!name)             { document.getElementById('inputName').focus(); return; }
+  if (!amount || amount <= 0) { document.getElementById('inputAmount').focus(); return; }
+  if (!date) return;
+  if (!st.data[st.activeCard]) st.data[st.activeCard] = {};
+  var k = mk();
+  if (!st.data[st.activeCard][k]) st.data[st.activeCard][k] = [];
+  var existingCats = (st.data[st.activeCard][k] || []).map(function(e){ return e.cat; });
+  var isNewCat = existingCats.indexOf(st.selCat) < 0;
+  st.data[st.activeCard][k].push({ id: st.nextId++, name: name, amount: amount, date: date, cat: st.selCat });
+  closeModal('addModal');
+  renderTabs();
+  renderHeader();
+  renderBubbles(isNewCat ? st.selCat : null);
+}
+
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+function closeIfBg(e, id) { if (e.target === e.currentTarget) closeModal(id); }
+
+render();
+</script>
+</body>
+</html>
