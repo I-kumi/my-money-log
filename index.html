@@ -272,87 +272,77 @@ function renderBubbles(newCatId) {
     var fabHeight   = 80;
     var floorY      = H - fabHeight;
 
-    // 落下開始位置: ランダムなし、均等に並べて上から順番に落とす
-    if (newCatId === 'existing') {
-      // 既存カテゴリへの追加: アニメーションなし、サイズだけ更新して即配置
-      bubbles.forEach(function(b, i) {
-        b.x = (W / (bubbles.length + 1)) * (i + 1);
-        b.y = floorY - b.r;
-        b.vx = 0; b.vy = 0;
-        b.settled = true;
+    // ボールを重ならず積み上げる共通配置関数（アニメーションなし）
+    function packBubbles(targets) {
+      // 大きい順に並べる
+      var sorted = targets.slice().sort(function(a, b){ return b.r - a.r; });
+      // 1個目は床中央に置く
+      sorted[0].x = W / 2;
+      sorted[0].y = floorY - sorted[0].r;
+      // 2個目以降は既存ボールに接するよう順番に配置
+      for (var si = 1; si < sorted.length; si++) {
+        var b = sorted[si];
+        var placed = false;
+        // 既配置ボールの隣に置けるか試す（左右交互）
+        var candidates = [];
+        for (var sj = 0; sj < si; sj++) {
+          var ref = sorted[sj];
+          // 右隣
+          candidates.push({ x: ref.x + ref.r + b.r + 1, y: floorY - b.r });
+          // 左隣
+          candidates.push({ x: ref.x - ref.r - b.r - 1, y: floorY - b.r });
+          // 上（2つのボールに乗る）
+          for (var sk = sj + 1; sk < si; sk++) {
+            var ref2 = sorted[sk];
+            var cx = (ref.x + ref2.x) / 2;
+            var dx = cx - ref.x;
+            var minD = ref.r + b.r;
+            var dy2 = Math.sqrt(Math.max(0, minD * minD - dx * dx));
+            candidates.push({ x: cx, y: ref.y - dy2 });
+          }
+        }
+        // 床に単独配置も候補に（左寄り・右寄り）
+        candidates.push({ x: b.r + 2,     y: floorY - b.r });
+        candidates.push({ x: W - b.r - 2, y: floorY - b.r });
+
+        // 候補の中から「重なりなし・壁内」の最も低い位置を選ぶ
+        var bestY = -99999, bestX = W / 2;
+        for (var ci = 0; ci < candidates.length; ci++) {
+          var cx2 = candidates[ci].x, cy2 = candidates[ci].y;
+          if (cx2 - b.r < 0 || cx2 + b.r > W) continue;
+          if (cy2 + b.r > floorY + 1) continue;
+          var ok = true;
+          for (var sj2 = 0; sj2 < si; sj2++) {
+            var ob = sorted[sj2];
+            var ddx = ob.x - cx2, ddy = ob.y - cy2;
+            if (Math.sqrt(ddx*ddx + ddy*ddy) < ob.r + b.r - 0.5) { ok = false; break; }
+          }
+          if (ok && cy2 > bestY) { bestY = cy2; bestX = cx2; placed = true; }
+        }
+        if (!placed) { b.x = W / 2; b.y = floorY - b.r; }
+        else         { b.x = bestX; b.y = bestY; }
+      }
+      targets.forEach(function(b) {
+        b.vx = 0; b.vy = 0; b.settled = true;
+        b.x = Math.round(b.x); b.y = Math.round(b.y);
         b.el.style.left = (b.x - b.r) + 'px';
         b.el.style.top  = (b.y - b.r) + 'px';
       });
-      // 重なり解消
-      for (var pass0 = 0; pass0 < 120; pass0++) {
-        var anyOv0 = false;
-        for (var pi0 = 0; pi0 < bubbles.length; pi0++) {
-          for (var pj0 = pi0 + 1; pj0 < bubbles.length; pj0++) {
-            var ba0 = bubbles[pi0], bb0 = bubbles[pj0];
-            var ddx0 = bb0.x - ba0.x, ddy0 = bb0.y - ba0.y;
-            var dd0 = Math.sqrt(ddx0*ddx0 + ddy0*ddy0);
-            var md0 = ba0.r + bb0.r + 1;
-            if (dd0 > 0 && dd0 < md0) {
-              anyOv0 = true;
-              var ov0 = (md0 - dd0) / 2;
-              var nnx0 = ddx0/dd0;
-              ba0.x -= nnx0 * ov0; bb0.x += nnx0 * ov0;
-              ba0.y = floorY - ba0.r; bb0.y = floorY - bb0.r;
-              if (ba0.x - ba0.r < 0) ba0.x = ba0.r;
-              if (ba0.x + ba0.r > W) ba0.x = W - ba0.r;
-              if (bb0.x - bb0.r < 0) bb0.x = bb0.r;
-              if (bb0.x + bb0.r > W) bb0.x = W - bb0.r;
-              ba0.el.style.left = (ba0.x - ba0.r) + 'px';
-              bb0.el.style.left = (bb0.x - bb0.r) + 'px';
-            }
-          }
-        }
-        if (!anyOv0) break;
-      }
+    }
+
+    // 落下開始位置: ランダムなし、均等に並べて上から順番に落とす
+    if (newCatId === 'existing') {
+      // 既存カテゴリへの追加: アニメーションなし、サイズだけ更新して即配置
+      packBubbles(bubbles);
       return; // アニメーションループ不要
     } else if (newCatId) {
       // 既存ボールは現在の位置で settled 扱い（前回物理の着地点をそのまま使う）
       // ただし grid を再構築しているので、settled 位置を再計算する必要がある
       // → 既存ボールを瞬時に床配置してから新ボールだけ落とす
-      bubbles.forEach(function(b, i) {
-        if (b.catId !== newCatId) {
-          b.x = (W / (bubbles.length + 1)) * (i + 1);
-          b.y = floorY - b.r;
-          b.vx = 0; b.vy = 0;
-          b.settled = true;
-          b.el.style.left = (b.x - b.r) + 'px';
-          b.el.style.top  = (b.y - b.r) + 'px';
-        }
-      });
-      // 既存ボール同士の重なりを解消
-      for (var pass = 0; pass < 120; pass++) {
-        var anyOv = false;
-        for (var pi = 0; pi < bubbles.length; pi++) {
-          if (!bubbles[pi].settled) continue;
-          for (var pj = pi + 1; pj < bubbles.length; pj++) {
-            if (!bubbles[pj].settled) continue;
-            var ba = bubbles[pi], bb = bubbles[pj];
-            var ddx = bb.x - ba.x, ddy = bb.y - ba.y;
-            var dd = Math.sqrt(ddx*ddx + ddy*ddy);
-            var md = ba.r + bb.r + 1;
-            if (dd > 0 && dd < md) {
-              anyOv = true;
-              var ov = (md - dd) / 2;
-              var nnx = ddx/dd;
-              ba.x -= nnx * ov; bb.x += nnx * ov;
-              ba.y = floorY - ba.r; bb.y = floorY - bb.r;
-              if (ba.x - ba.r < 0) ba.x = ba.r;
-              if (ba.x + ba.r > W) ba.x = W - ba.r;
-              if (bb.x - bb.r < 0) bb.x = bb.r;
-              if (bb.x + bb.r > W) bb.x = W - bb.r;
-              ba.el.style.left = (ba.x - ba.r) + 'px';
-              bb.el.style.left = (bb.x - bb.r) + 'px';
-            }
-          }
-        }
-        if (!anyOv) break;
-      }
-      // 新ボールを上から落とす（x は均等配置の位置、vx なし）
+      // 既存ボールを packBubbles で重なりなく配置
+      var settledBubbles = bubbles.filter(function(b){ return b.catId !== newCatId; });
+      packBubbles(settledBubbles);
+      // 新ボールを上から落とす（x は中央寄り、vx なし）
       bubbles.forEach(function(b, i) {
         if (b.catId === newCatId) {
           b.x  = (W / (bubbles.length + 1)) * (i + 1);
