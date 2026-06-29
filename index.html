@@ -596,7 +596,7 @@ function addEntry() {
   var k = mk();
   if (!st.data[st.activeCard][k]) st.data[st.activeCard][k] = [];
   var existingCats = (st.data[st.activeCard][k] || []).map(function(e){ return e.cat; });
-  var isNewCat = existingCats.indexOf(st.selCat) < 0;
+  var isNewCat = existingCats.indexOf(st.selCat) < 0;  // push前に判定
   var newEntry = { id: st.nextId++, name: name, amount: amount, date: date, cat: st.selCat };
   st.data[st.activeCard][k].push(newEntry);
   closeModal('addModal');
@@ -628,7 +628,7 @@ function loadData() {
   document.getElementById('bubbleGrid').innerHTML =
     '<div class="loading-state"><i class="ti ti-loader" style="font-size:36px;display:block;margin-bottom:8px;animation:spin 1s linear infinite;"></i>読み込み中...</div>';
 
-  fetch(GAS_URL)
+  fetch(GAS_URL + '?t=' + Date.now())
     .then(function(res){ return res.json(); })
     .then(function(json) {
       if (json.status !== 'ok') { render(); return; }
