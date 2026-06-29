@@ -273,7 +273,44 @@ function renderBubbles(newCatId) {
     var floorY      = H - fabHeight;
 
     // 落下開始位置: ランダムなし、均等に並べて上から順番に落とす
-    if (newCatId) {
+    if (newCatId === 'existing') {
+      // 既存カテゴリへの追加: アニメーションなし、サイズだけ更新して即配置
+      bubbles.forEach(function(b, i) {
+        b.x = (W / (bubbles.length + 1)) * (i + 1);
+        b.y = floorY - b.r;
+        b.vx = 0; b.vy = 0;
+        b.settled = true;
+        b.el.style.left = (b.x - b.r) + 'px';
+        b.el.style.top  = (b.y - b.r) + 'px';
+      });
+      // 重なり解消
+      for (var pass0 = 0; pass0 < 120; pass0++) {
+        var anyOv0 = false;
+        for (var pi0 = 0; pi0 < bubbles.length; pi0++) {
+          for (var pj0 = pi0 + 1; pj0 < bubbles.length; pj0++) {
+            var ba0 = bubbles[pi0], bb0 = bubbles[pj0];
+            var ddx0 = bb0.x - ba0.x, ddy0 = bb0.y - ba0.y;
+            var dd0 = Math.sqrt(ddx0*ddx0 + ddy0*ddy0);
+            var md0 = ba0.r + bb0.r + 1;
+            if (dd0 > 0 && dd0 < md0) {
+              anyOv0 = true;
+              var ov0 = (md0 - dd0) / 2;
+              var nnx0 = ddx0/dd0;
+              ba0.x -= nnx0 * ov0; bb0.x += nnx0 * ov0;
+              ba0.y = floorY - ba0.r; bb0.y = floorY - bb0.r;
+              if (ba0.x - ba0.r < 0) ba0.x = ba0.r;
+              if (ba0.x + ba0.r > W) ba0.x = W - ba0.r;
+              if (bb0.x - bb0.r < 0) bb0.x = bb0.r;
+              if (bb0.x + bb0.r > W) bb0.x = W - bb0.r;
+              ba0.el.style.left = (ba0.x - ba0.r) + 'px';
+              bb0.el.style.left = (bb0.x - bb0.r) + 'px';
+            }
+          }
+        }
+        if (!anyOv0) break;
+      }
+      return; // アニメーションループ不要
+    } else if (newCatId) {
       // 既存ボールは現在の位置で settled 扱い（前回物理の着地点をそのまま使う）
       // ただし grid を再構築しているので、settled 位置を再計算する必要がある
       // → 既存ボールを瞬時に床配置してから新ボールだけ落とす
@@ -574,7 +611,7 @@ function addEntry() {
   closeModal('addModal');
   renderTabs();
   renderHeader();
-  renderBubbles(isNewCat ? st.selCat : null);
+  renderBubbles(isNewCat ? st.selCat : 'existing');
   // スプレッドシートに保存
   fetch(GAS_URL, {
     method: 'POST',
