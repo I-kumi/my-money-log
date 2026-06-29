@@ -33,6 +33,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-ser
 .bubble { border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; position: absolute; }
 .bubble:active { opacity: 0.85; }
 .empty-state { text-align: center; color: #bbb; font-size: 14px; padding: 60px 20px; width: 100%; }
+.loading-state { text-align: center; color: #bbb; font-size: 14px; padding: 60px 20px; width: 100%; }
 
 .fab { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: rgba(0,153,153,0.6); color: #fff; border: none; border-radius: 24px; padding: 10px 22px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; z-index: 10; box-shadow: none; }
 .fab i { font-size: 15px; }
@@ -67,6 +68,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-ser
 .submit-btn:active { opacity: 0.9; }
 .page-fade { animation: pageFadeIn 0.3s ease; }
 @keyframes pageFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -145,7 +147,6 @@ var st = {
   selCat: 'food', nextId: 100,
   detailCatId: null
 };
-var _firstLoad = true;  // drop animation only on first load
 var GAS_URL = 'https://script.google.com/macros/s/AKfycbwrESdZCt-6RgyGihBy17JKKhcnunW8LH6oo2vUS4orO66cjLu_6NGeOh2EX8FelAaj/exec';
 
 function mk() { return st.year + '-' + String(st.month).padStart(2,'0'); }
@@ -192,95 +193,6 @@ function renderHeader() {
 
 // ---- Physics ----
 var _animFrame = null;
-
-// ボールを床から積み上げるレイアウト関数
-function stackBubbles(bubbles, W, floorY) {
-  // まず全ボールを床に並べてオーバーラップ解消
-  var sorted = bubbles.slice().sort(function(a, b){ return b.r - a.r; });
-  sorted.forEach(function(b, i) {
-    b.y = floorY - b.r;
-    b.x = (W / (sorted.length + 1)) * (i + 1);
-    b.vx = 0; b.vy = 0;
-  });
-
-  // オーバーラップ解消（横方向のみ、壁クランプあり）
-  for (var pass = 0; pass < 150; pass++) {
-    var anyOv = false;
-    for (var i = 0; i < bubbles.length; i++) {
-      for (var j = i + 1; j < bubbles.length; j++) {
-        var a = bubbles[i], b = bubbles[j];
-        var dx = b.x - a.x, dy = b.y - a.y;
-        var dist = Math.sqrt(dx*dx + dy*dy);
-        var minD = a.r + b.r + 1;
-        if (dist > 0 && dist < minD) {
-          anyOv = true;
-          var ov = (minD - dist) / 2;
-          var nx = dx/dist, ny = dy/dist;
-          a.x -= nx*ov; a.y -= ny*ov;
-          b.x += nx*ov; b.y += ny*ov;
-          // 床より下に行ったら床に戻す
-          if (a.y + a.r > floorY) a.y = floorY - a.r;
-          if (b.y + b.r > floorY) b.y = floorY - b.r;
-          // 壁クランプ
-          if (a.x - a.r < 0) a.x = a.r;
-          if (a.x + a.r > W) a.x = W - a.r;
-          if (b.x - b.r < 0) b.x = b.r;
-          if (b.x + b.r > W) b.x = W - b.r;
-        }
-      }
-    }
-    if (!anyOv) break;
-  }
-
-  // 2段目に積む: 床段のボールからはみ出しているものを上に乗せる
-  // 床段: 左端〜右端に収まっているか確認、収まらないものを上段へ
-  var floorBubbles = [];
-  var upperBubbles = [];
-  bubbles.forEach(function(b) {
-    if (b.x - b.r >= 0 && b.x + b.r <= W) {
-      floorBubbles.push(b);
-    } else {
-      upperBubbles.push(b);
-    }
-  });
-
-  // はみ出したボールを床段の上に乗せる
-  upperBubbles.forEach(function(b, idx) {
-    // 床段の中で乗れる場所を探す
-    var placed = false;
-    for (var fi = 0; fi < floorBubbles.length; fi++) {
-      var fb = floorBubbles[fi];
-      var candX = fb.x;
-      var candY = fb.y - fb.r - b.r;
-      // 他のボールと重ならないか確認
-      var ok = true;
-      for (var fj = 0; fj < floorBubbles.length; fj++) {
-        if (fj === fi) continue;
-        var ob = floorBubbles[fj];
-        var ddx = ob.x - candX, ddy = ob.y - candY;
-        if (Math.sqrt(ddx*ddx + ddy*ddy) < ob.r + b.r + 1) { ok = false; break; }
-      }
-      if (ok && candX - b.r >= 0 && candX + b.r <= W) {
-        b.x = candX; b.y = candY;
-        placed = true;
-        floorBubbles.push(b);
-        break;
-      }
-    }
-    if (!placed) {
-      // 中央上部に配置
-      b.x = W / 2;
-      b.y = floorY - Math.max.apply(null, floorBubbles.map(function(fb){ return fb.r*2; })) - b.r - 10;
-      floorBubbles.push(b);
-    }
-  });
-
-  bubbles.forEach(function(b) {
-    b.el.style.left = (b.x - b.r) + 'px';
-    b.el.style.top  = (b.y - b.r) + 'px';
-    b.settled = true;
-  });
-}
 
 function stopPhysics() {
   if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null; }
@@ -334,7 +246,6 @@ function renderBubbles(newCatId) {
 
   grid.innerHTML = '';
 
-  // build DOM elements first so layout can happen
   var bubbles = active.map(function(cat, i) {
     var amt = totals[cat.id];
     var ratio = maxAmt === minAmt ? 1 : (amt - minAmt) / (maxAmt - minAmt);
@@ -342,14 +253,12 @@ function renderBubbles(newCatId) {
     var r = Math.round(minR + (maxR - minR) * ratio);
     var el = makeBubbleEl(cat, r, amt);
     el.onclick = (function(c, el){ return function(){ goDetail(c, el); }; })(cat, el);
-    // hide off-screen before layout so there's no flash at (0,0)
     el.style.left = '-999px';
     el.style.top  = '-999px';
     grid.appendChild(el);
     return { el: el, r: r, x: 0, y: 0, vx: 0, vy: 0, settled: false, catId: cat.id };
   });
 
-  // after DOM is painted, read dimensions and start physics
   setTimeout(function() {
     var areaEl = document.querySelector('.bubble-area');
     var W = areaEl.offsetWidth;
@@ -357,103 +266,61 @@ function renderBubbles(newCatId) {
     if (W < 100) W = 340;
     if (H < 200) H = 360;
 
-    var GRAVITY  = newCatId ? 0.35 : 0.25;
-    var RESTITUTION = 0.45;
-    var FRICTION = 0.82;
-    var fabHeight = 80;
-    var floorY   = H - fabHeight;
-    var maxFrames = 500;
-    var frame = 0;
+    var GRAVITY     = 0.45;
+    var RESTITUTION = 0.62;  // バウンドの反発係数（高めにして複数回バウンド）
+    var FRICTION    = 0.88;  // 床・壁の摩擦
+    var fabHeight   = 80;
+    var floorY      = H - fabHeight;
 
-    if (!_firstLoad && !newCatId) {
-      // no animation: place bubbles directly at rest position
-      // simple packed layout along the floor
-      // place bubbles at rest without animation
-      // first set all y to floor
-      bubbles.forEach(function(b, i) {
-        b.y = floorY - b.r;
-        b.x = (W / (bubbles.length + 1)) * (i + 1);
-        b.vx = 0; b.vy = 0;
-      });
-      // iterative overlap resolution (100 passes)
-      for (var pass = 0; pass < 100; pass++) {
-        var anyOverlap = false;
-        for (var pi = 0; pi < bubbles.length; pi++) {
-          for (var pj = pi + 1; pj < bubbles.length; pj++) {
-            var ba = bubbles[pi], bb = bubbles[pj];
-            var ddx = bb.x - ba.x, ddy = bb.y - ba.y;
-            var dd = Math.sqrt(ddx*ddx + ddy*ddy);
-            var md = ba.r + bb.r + 1;
-            if (dd > 0 && dd < md) {
-              anyOverlap = true;
-              var ov = (md - dd) / 2;
-              var nx = ddx/dd, ny = ddy/dd;
-              ba.x -= nx * ov; bb.x += nx * ov;
-              // keep on floor
-              ba.y = floorY - ba.r;
-              bb.y = floorY - bb.r;
-              // clamp walls
-              if (ba.x - ba.r < 0) ba.x = ba.r;
-              if (ba.x + ba.r > W) ba.x = W - ba.r;
-              if (bb.x - bb.r < 0) bb.x = bb.r;
-              if (bb.x + bb.r > W) bb.x = W - bb.r;
-            }
-          }
-        }
-        if (!anyOverlap) break;
-      }
-      // 2段積み: 床に収まらないボールを上段に積む
-      stackBubbles(bubbles, W, floorY);
-      return;
-    }
-
-    // drop animation
-    _firstLoad = false;
-
+    // 落下開始位置: ランダムなし、均等に並べて上から順番に落とす
     if (newCatId) {
-      // static placement first for all bubbles
+      // 既存ボールは現在の位置で settled 扱い（前回物理の着地点をそのまま使う）
+      // ただし grid を再構築しているので、settled 位置を再計算する必要がある
+      // → 既存ボールを瞬時に床配置してから新ボールだけ落とす
       bubbles.forEach(function(b, i) {
-        b.y = floorY - b.r;
-        b.x = (W / (bubbles.length + 1)) * (i + 1);
-        b.vx = 0; b.vy = 0;
-      });
-      // resolve overlaps
-      for (var pass = 0; pass < 100; pass++) {
-        var anyOv = false;
-        for (var pi2 = 0; pi2 < bubbles.length; pi2++) {
-          for (var pj2 = pi2 + 1; pj2 < bubbles.length; pj2++) {
-            var ba2 = bubbles[pi2], bb2 = bubbles[pj2];
-            var ddx2 = bb2.x - ba2.x, ddy2 = bb2.y - ba2.y;
-            var dd2 = Math.sqrt(ddx2*ddx2 + ddy2*ddy2);
-            var md2 = ba2.r + bb2.r + 1;
-            if (dd2 > 0 && dd2 < md2) {
-              anyOv = true;
-              var ov2 = (md2 - dd2) / 2;
-              var nx2 = ddx2/dd2;
-              ba2.x -= nx2 * ov2; bb2.x += nx2 * ov2;
-              ba2.y = floorY - ba2.r; bb2.y = floorY - bb2.r;
-              if (ba2.x - ba2.r < 0) ba2.x = ba2.r;
-              if (ba2.x + ba2.r > W) ba2.x = W - ba2.r;
-              if (bb2.x - bb2.r < 0) bb2.x = bb2.r;
-              if (bb2.x + bb2.r > W) bb2.x = W - bb2.r;
-            }
-          }
-        }
-        if (!anyOv) break;
-      }
-      // place existing bubbles at rest
-      bubbles.forEach(function(b) {
         if (b.catId !== newCatId) {
+          b.x = (W / (bubbles.length + 1)) * (i + 1);
+          b.y = floorY - b.r;
+          b.vx = 0; b.vy = 0;
           b.settled = true;
           b.el.style.left = (b.x - b.r) + 'px';
           b.el.style.top  = (b.y - b.r) + 'px';
         }
       });
-      // drop only the new cat bubble from above
-      bubbles.forEach(function(b) {
+      // 既存ボール同士の重なりを解消
+      for (var pass = 0; pass < 120; pass++) {
+        var anyOv = false;
+        for (var pi = 0; pi < bubbles.length; pi++) {
+          if (!bubbles[pi].settled) continue;
+          for (var pj = pi + 1; pj < bubbles.length; pj++) {
+            if (!bubbles[pj].settled) continue;
+            var ba = bubbles[pi], bb = bubbles[pj];
+            var ddx = bb.x - ba.x, ddy = bb.y - ba.y;
+            var dd = Math.sqrt(ddx*ddx + ddy*ddy);
+            var md = ba.r + bb.r + 1;
+            if (dd > 0 && dd < md) {
+              anyOv = true;
+              var ov = (md - dd) / 2;
+              var nnx = ddx/dd;
+              ba.x -= nnx * ov; bb.x += nnx * ov;
+              ba.y = floorY - ba.r; bb.y = floorY - bb.r;
+              if (ba.x - ba.r < 0) ba.x = ba.r;
+              if (ba.x + ba.r > W) ba.x = W - ba.r;
+              if (bb.x - bb.r < 0) bb.x = bb.r;
+              if (bb.x + bb.r > W) bb.x = W - bb.r;
+              ba.el.style.left = (ba.x - ba.r) + 'px';
+              bb.el.style.left = (bb.x - bb.r) + 'px';
+            }
+          }
+        }
+        if (!anyOv) break;
+      }
+      // 新ボールを上から落とす（x は均等配置の位置、vx なし）
+      bubbles.forEach(function(b, i) {
         if (b.catId === newCatId) {
-          b.y  = -b.r - 40;
-          b.vx = (Math.random() - 0.5) * 1.2;
+          b.x  = (W / (bubbles.length + 1)) * (i + 1);
+          b.y  = -b.r - 20;
+          b.vx = 0;
           b.vy = 0;
           b.settled = false;
           b.el.style.left = (b.x - b.r) + 'px';
@@ -461,19 +328,19 @@ function renderBubbles(newCatId) {
         }
       });
     } else {
-      // full drop: all bubbles fall
+      // 全ボールを上から順番に落とす（vx なし）
       bubbles.forEach(function(b, i) {
         b.x  = (W / (bubbles.length + 1)) * (i + 1);
-        b.y  = -b.r - i * 90;
-        b.vx = (Math.random() - 0.5) * 1.2;
+        b.y  = -b.r - i * 100;
+        b.vx = 0;
         b.vy = 0;
+        b.settled = false;
         b.el.style.left = (b.x - b.r) + 'px';
         b.el.style.top  = (b.y - b.r) + 'px';
       });
     }
 
     function step() {
-      frame++;
       var allSettled = true;
 
       for (var i = 0; i < bubbles.length; i++) {
@@ -481,95 +348,92 @@ function renderBubbles(newCatId) {
         if (b.settled) continue;
         allSettled = false;
 
+        // 重力
         b.vy += GRAVITY;
         b.x  += b.vx;
         b.y  += b.vy;
 
-        // floor
+        // 床との衝突
         if (b.y + b.r >= floorY) {
           b.y  = floorY - b.r;
           b.vy = -Math.abs(b.vy) * RESTITUTION;
           b.vx *= FRICTION;
-          if (Math.abs(b.vy) < 0.6) b.vy = 0;
+          if (Math.abs(b.vy) < 0.5) b.vy = 0;
+          if (Math.abs(b.vx) < 0.1) b.vx = 0;
         }
 
-        // walls
-        if (b.x - b.r < 0)  { b.x = b.r;     b.vx =  Math.abs(b.vx) * 0.5; }
-        if (b.x + b.r > W)  { b.x = W - b.r;  b.vx = -Math.abs(b.vx) * 0.5; }
+        // 壁との衝突
+        if (b.x - b.r < 0)  { b.x = b.r;    b.vx =  Math.abs(b.vx) * 0.4; }
+        if (b.x + b.r > W)  { b.x = W - b.r; b.vx = -Math.abs(b.vx) * 0.4; }
 
-        // bubble collisions
-        for (var j = i + 1; j < bubbles.length; j++) {
+        // ボール同士の衝突（settled に乗り上げる動作を含む）
+        for (var j = 0; j < bubbles.length; j++) {
+          if (i === j) continue;
           var b2 = bubbles[j];
           var dx   = b2.x - b.x;
           var dy   = b2.y - b.y;
           var dist = Math.sqrt(dx * dx + dy * dy);
-          var minD = b.r + b2.r;
+          var minD = b.r + b2.r + 0.5;
           if (dist > 0 && dist < minD) {
-            var overlap = (minD - dist) / 2;
+            var overlap = minD - dist;
             var nx = dx / dist;
             var ny = dy / dist;
-            // fully separate: settledなボールは動かさない
-            if (!b.settled && !b2.settled) {
-              b.x  -= nx * overlap * 1.05;
-              b.y  -= ny * overlap * 1.05;
-              b2.x += nx * overlap * 1.05;
-              b2.y += ny * overlap * 1.05;
-            } else if (b.settled) {
-              b2.x += nx * overlap * 2.0;
-              b2.y += ny * overlap * 2.0;
+
+            if (b2.settled) {
+              // settled なボールには乗り上げる: b だけ押し戻す
+              b.x -= nx * overlap;
+              b.y -= ny * overlap;
+              // 速度を反射（減衰あり）
+              var dot = b.vx * nx + b.vy * ny;
+              if (dot > 0) {
+                b.vx -= dot * nx * 1.35;
+                b.vy -= dot * ny * 1.35;
+                b.vx *= 0.75;
+                b.vy *= 0.75;
+              }
             } else {
-              b.x  -= nx * overlap * 2.0;
-              b.y  -= ny * overlap * 2.0;
+              // 両方 unsettled: 均等に押し分ける
+              b.x  -= nx * overlap * 0.5;
+              b.y  -= ny * overlap * 0.5;
+              b2.x += nx * overlap * 0.5;
+              b2.y += ny * overlap * 0.5;
+              // 速度交換（弾性衝突・減衰あり）
+              var dvx = b.vx - b2.vx;
+              var dvy = b.vy - b2.vy;
+              var dot2 = dvx * nx + dvy * ny;
+              if (dot2 > 0) {
+                var imp = dot2 * 0.6;
+                b.vx  -= imp * nx;  b.vy  -= imp * ny;
+                b2.vx += imp * nx;  b2.vy += imp * ny;
+              }
             }
-            var dvx = b.vx - b2.vx;
-            var dvy = b.vy - b2.vy;
-            var dot = dvx * nx + dvy * ny;
-            if (dot > 0) {
-              var imp = dot * 0.55;
-              // settledなボールは動かさない
-              if (!b.settled)  { b.vx  -= imp * nx; b.vy  -= imp * ny; }
-              if (!b2.settled) { b2.vx += imp * nx; b2.vy += imp * ny; }
-            }
-            if (!b2.settled) b2.settled = false;
+
+            // 壁クランプ（衝突後）
+            if (b.x - b.r < 0)  b.x = b.r;
+            if (b.x + b.r > W)  b.x = W - b.r;
+            if (b.y + b.r > floorY) b.y = floorY - b.r;
           }
         }
 
-        // settle
-        var speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
-        if (speed < 0.25 && b.y + b.r >= floorY - 2) {
-          b.vx = 0; b.vy = 0; b.settled = true;
-        }
-
+        // DOM 更新
         b.el.style.left = (b.x - b.r) + 'px';
         b.el.style.top  = (b.y - b.r) + 'px';
-      }
 
-      // extra overlap cleanup pass every frame even after settling
-      for (var ii = 0; ii < bubbles.length; ii++) {
-        for (var jj = ii + 1; jj < bubbles.length; jj++) {
-          var ba = bubbles[ii], bb2 = bubbles[jj];
-          var ddx = bb2.x - ba.x, ddy = bb2.y - ba.y;
-          var dd = Math.sqrt(ddx*ddx + ddy*ddy);
-          var md = ba.r + bb2.r;
-          if (dd > 0 && dd < md) {
-            var ov = (md - dd) / 2 + 0.5;
-            var nnx = ddx/dd, nny = ddy/dd;
-            ba.x -= nnx*ov; ba.y -= nny*ov;
-            bb2.x += nnx*ov; bb2.y += nny*ov;
-            ba.settled = false; bb2.settled = false;
-            ba.el.style.left = (ba.x - ba.r) + 'px';
-            ba.el.style.top  = (ba.y - ba.r) + 'px';
-            bb2.el.style.left = (bb2.x - bb2.r) + 'px';
-            bb2.el.style.top  = (bb2.y - bb2.r) + 'px';
-          }
+        // 静止判定: 速度が十分小さければ settled（床接触は必須としない）
+        var speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+        if (speed < 0.08) {
+          b.vx = 0; b.vy = 0;
+          b.x  = Math.round(b.x);
+          b.y  = Math.round(b.y);
+          b.settled = true;
+          b.el.style.left = (b.x - b.r) + 'px';
+          b.el.style.top  = (b.y - b.r) + 'px';
         }
       }
 
-      if (!allSettled && frame < maxFrames) {
+      if (!allSettled) {
         _animFrame = requestAnimationFrame(step);
       } else {
-        // アニメーション終了後に2段積み整理
-        stackBubbles(bubbles, W, floorY);
         _animFrame = null;
       }
     }
@@ -647,7 +511,9 @@ function renderDetail(cat) {
 function goBack() {
   document.getElementById('detailPage').classList.remove('active');
   document.getElementById('mainPage').classList.add('active');
-  render();
+  // ボールは再描画しない（位置はそのまま）
+  renderTabs();
+  renderHeader();
 }
 
 function fmtDate(d) {
@@ -728,34 +594,40 @@ function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 function closeIfBg(e, id) { if (e.target === e.currentTarget) closeModal(id); }
 
 function loadData() {
+  // ローディング中はタブとヘッダーだけ表示、ボールエリアはローディング表示
+  renderTabs();
+  renderHeader();
+  document.getElementById('bubbleGrid').innerHTML =
+    '<div class="loading-state"><i class="ti ti-loader" style="font-size:36px;display:block;margin-bottom:8px;animation:spin 1s linear infinite;"></i>読み込み中...</div>';
+
   fetch(GAS_URL)
     .then(function(res){ return res.json(); })
     .then(function(json) {
       if (json.status !== 'ok') { render(); return; }
-      // rebuild st.data from sheet rows
       st.data = {};
       st.nextId = 1;
       json.data.forEach(function(row) {
         var card = row.card;
-        var date = row.date;
-        var ym = date.substring(0, 7); // 'YYYY-MM'
-        if (!st.data[card]) { st.data[card] = {}; st.cards.push(card); }
+        var date = String(row.date);
+        var ym = date.substring(0, 7);
+        if (!st.data[card]) { st.data[card] = {}; }
+        if (st.cards.indexOf(card) < 0) st.cards.push(card);
         if (!st.data[card][ym]) st.data[card][ym] = [];
         var id = parseInt(row.id) || st.nextId;
         st.data[card][ym].push({
           id: id,
           name: row.name,
           amount: parseInt(row.amount),
-          date: row.date,
+          date: date,
           cat: row.cat
         });
         if (id >= st.nextId) st.nextId = id + 1;
       });
-      // deduplicate cards
       st.cards = st.cards.filter(function(c, i, a){ return a.indexOf(c) === i; });
       if (st.cards.indexOf(st.activeCard) < 0 && st.cards.length > 0) {
         st.activeCard = st.cards[0];
       }
+      // データ読み込み完了後に1回だけrender
       render();
     })
     .catch(function(e) {
