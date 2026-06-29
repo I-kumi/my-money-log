@@ -275,57 +275,68 @@ function renderBubbles(newCatId) {
     // ボールを重ならず積み上げる共通配置関数（アニメーションなし）
     function packBubbles(targets) {
       if (!targets || targets.length === 0) return;
-      // 大きい順に並べる
-      var sorted = targets.slice().sort(function(a, b){ return b.r - a.r; });
-      // 1個目は床中央に置く
-      sorted[0].x = W / 2;
-      sorted[0].y = floorY - sorted[0].r;
-      // 2個目以降は既存ボールに接するよう順番に配置
-      for (var si = 1; si < sorted.length; si++) {
-        var b = sorted[si];
-        var placed = false;
-        // 既配置ボールの隣に置けるか試す（左右交互）
-        var candidates = [];
-        for (var sj = 0; sj < si; sj++) {
-          var ref = sorted[sj];
-          // 右隣
-          candidates.push({ x: ref.x + ref.r + b.r + 1, y: floorY - b.r });
-          // 左隣
-          candidates.push({ x: ref.x - ref.r - b.r - 1, y: floorY - b.r });
-          // 上（2つのボールに乗る）
-          for (var sk = sj + 1; sk < si; sk++) {
-            var ref2 = sorted[sk];
-            var cx = (ref.x + ref2.x) / 2;
-            var dx = cx - ref.x;
-            var minD = ref.r + b.r;
-            var dy2 = Math.sqrt(Math.max(0, minD * minD - dx * dx));
-            candidates.push({ x: cx, y: ref.y - dy2 });
-          }
-        }
-        // 床に単独配置も候補に（左寄り・右寄り）
-        candidates.push({ x: b.r + 2,     y: floorY - b.r });
-        candidates.push({ x: W - b.r - 2, y: floorY - b.r });
 
-        // 候補の中から「重なりなし・壁内」の最も低い位置を選ぶ
-        var bestY = -99999, bestX = W / 2;
-        for (var ci = 0; ci < candidates.length; ci++) {
-          var cx2 = candidates[ci].x, cy2 = candidates[ci].y;
-          if (cx2 - b.r < 0 || cx2 + b.r > W) continue;
-          if (cy2 + b.r > floorY + 1) continue;
-          var ok = true;
-          for (var sj2 = 0; sj2 < si; sj2++) {
-            var ob = sorted[sj2];
-            var ddx = ob.x - cx2, ddy = ob.y - cy2;
-            if (Math.sqrt(ddx*ddx + ddy*ddy) < ob.r + b.r - 0.5) { ok = false; break; }
-          }
-          if (ok && cy2 > bestY) { bestY = cy2; bestX = cx2; placed = true; }
+      function overlaps(placed, cx, cy, cr) {
+        for (var i = 0; i < placed.length; i++) {
+          var p = placed[i];
+          var dx = p.x - cx, dy = p.y - cy;
+          if (Math.sqrt(dx*dx + dy*dy) < p.r + cr - 0.5) return true;
         }
-        if (!placed) { b.x = W / 2; b.y = floorY - b.r; }
-        else         { b.x = bestX; b.y = bestY; }
+        return false;
+      }
+
+      function getCandidates(placed, cr) {
+        var cands = [];
+        for (var xi = cr; xi <= W - cr; xi += 8) {
+          cands.push({ x: xi, y: floorY - cr });
+        }
+        for (var i = 0; i < placed.length; i++) {
+          var a = placed[i];
+          cands.push({ x: a.x + a.r + cr + 1, y: floorY - cr });
+          cands.push({ x: a.x - a.r - cr - 1, y: floorY - cr });
+          for (var j = i + 1; j < placed.length; j++) {
+            var pb = placed[j];
+            var dpa = a.r + cr, dpb = pb.r + cr;
+            var dx_ab = pb.x - a.x, dy_ab = pb.y - a.y;
+            var lab = Math.sqrt(dx_ab*dx_ab + dy_ab*dy_ab);
+            if (lab < 0.01 || lab > dpa + dpb) continue;
+            var cos_a = (dpa*dpa + lab*lab - dpb*dpb) / (2*dpa*lab);
+            if (cos_a < -1 || cos_a > 1) continue;
+            var sin_a = Math.sqrt(1 - cos_a*cos_a);
+            var ex = dx_ab/lab, ey = dy_ab/lab;
+            cands.push({ x: a.x + dpa*(ex*cos_a - ey*sin_a), y: a.y + dpa*(ey*cos_a + ex*sin_a) });
+            cands.push({ x: a.x + dpa*(ex*cos_a + ey*sin_a), y: a.y + dpa*(ey*cos_a - ex*sin_a) });
+          }
+        }
+        return cands;
+      }
+
+      // 大きい順に配置
+      var sorted = targets.slice().sort(function(a, b){ return b.r - a.r; });
+      var placed = [];
+      for (var si = 0; si < sorted.length; si++) {
+        var b = sorted[si];
+        var cands = getCandidates(placed, b.r);
+        var bestX = W / 2, bestY = -99999, found = false;
+        for (var ci = 0; ci < cands.length; ci++) {
+          var cx = cands[ci].x, cy = cands[ci].y;
+          if (cx - b.r < 1 || cx + b.r > W - 1) continue;
+          if (cy + b.r > floorY + 0.5) continue;
+          if (overlaps(placed, cx, cy, b.r)) continue;
+          if (cy > bestY) { bestX = cx; bestY = cy; found = true; }
+        }
+        if (!found) {
+          bestX = W / 2;
+          bestY = placed.length > 0
+            ? Math.min.apply(null, placed.map(function(p){ return p.y - p.r; })) - b.r - 2
+            : floorY - b.r;
+        }
+        b.x = Math.round(bestX);
+        b.y = Math.round(bestY);
+        placed.push(b);
       }
       targets.forEach(function(b) {
         b.vx = 0; b.vy = 0; b.settled = true;
-        b.x = Math.round(b.x); b.y = Math.round(b.y);
         b.el.style.left = (b.x - b.r) + 'px';
         b.el.style.top  = (b.y - b.r) + 'px';
       });
