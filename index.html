@@ -647,7 +647,13 @@ function loadData() {
       st.nextId = 1;
       json.data.forEach(function(row) {
         var card = row.card;
-        var date = String(row.date);
+        // UTCのISOStringをJST(+9h)に変換してからYYYY-MM-DD取得
+        var rawDate = String(row.date);
+        var dateObj = new Date(rawDate);
+        var jstDate = new Date(dateObj.getTime() + 9 * 60 * 60 * 1000);
+        var date = jstDate.getUTCFullYear() + '-' +
+          String(jstDate.getUTCMonth() + 1).padStart(2, '0') + '-' +
+          String(jstDate.getUTCDate()).padStart(2, '0');
         var ym = date.substring(0, 7);
         if (!st.data[card]) { st.data[card] = {}; }
         if (st.cards.indexOf(card) < 0) st.cards.push(card);
